@@ -1,693 +1,4 @@
-# Tokenizar y limpiar el texto
-        words = re.findall(r'\b\w+\b', text.lower())
-        words = [word for word in words if word.isalnum() and len(word) >= min_length and word not in stop_words]
-        
-        # Contar frecuencias
-        word_freq = Counter(words)
-        
-        # Devolver las palabras más frecuentes
-        return word_freq.most_common(top_n)
-    
-    def analyze_keyword_phrases(self, text, language='es', min_length=2, max_length=4, top_n=20):
-        """Analiza frases clave (n-gramas) en el texto"""
-        if not text:
-            return []
-            
-        # Seleccionar stopwords según el idioma
-        stop_words = self.get_language_stopwords(language)
-        
-        # Tokenizar y limpiar el texto
-        words = re.findall(r'\b\w+\b', text.lower())
-        words = [word for word in words if word.isalnum() and word not in stop_words]
-        
-        # Generar n-gramas
-        phrases = []
-        for n in range(min_length, max_length + 1):
-            for i in range(len(words) - n + 1):
-                phrases.append(' '.join(words[i:i+n]))
-        
-        # Contar frecuencias
-        phrase_freq = Counter(phrases)
-        
-        # Devolver las frases más frecuentes
-        return phrase_freq.most_common(top_n)
-    
-    def analyze_content_structure(self, seo_data):
-        """Analiza la estructura del contenido"""
-        structure_analysis = {
-            'title_length': len(seo_data['title']),
-            'meta_description_length': len(seo_data['meta_description']),
-            'title': seo_data['title'],
-            'meta_description': seo_data['meta_description'],
-            'has_h1': len(seo_data['h1_tags']) > 0,
-            'h1_count': len(seo_data['h1_tags']),
-            'h2_count': len(seo_data['h2_tags']),
-            'h3_count': len(seo_data['h3_tags']),
-            'paragraph_count': len(seo_data['paragraphs']),
-            'avg_paragraph_length': sum(len(p) for p in seo_data['paragraphs']) / len(seo_data['paragraphs']) if seo_data['paragraphs'] else 0,
-            'internal_link_count': len(seo_data['internal_links']),
-            'external_link_count': len(seo_data['external_links']),
-            'image_count': len(seo_data['images']),
-            'images_with_alt': sum(1 for img in seo_data['images'] if img.get('alt')),
-            'schema_types': seo_data['schema_data'],
-            'has_schema': len(seo_data['schema_data']) > 0,
-            'h1_tags': seo_data['h1_tags'][:3] if seo_data['h1_tags'] else [],
-            'h2_tags': seo_data['h2_tags'][:5] if seo_data['h2_tags'] else [],
-        }
-        return structure_analysis
-    
-    def compare_competitors(self, urls, target_keyword=None, language='es'):
-        """Compara el contenido de múltiples competidores con enfoque en SEO"""
-        results = []
-        all_keywords = Counter()
-        all_phrases = Counter()
-        related_keywords = []
-        
-        # Si hay una keyword objetivo, generamos keywords relacionadas
-        if target_keyword:
-            related_keywords = self.generate_related_keywords(target_keyword, language)
-        
-        for url in urls:
-            print(f"Analizando: {url}")
-            seo_data = self.extract_content(url, target_keyword)
-            
-            if not seo_data:
-                print(f"No se pudo analizar {url}, continuando con la siguiente URL")
-                continue
-                
-            try:
-                # Analizar palabras clave
-                keywords = self.analyze_keywords(seo_data['main_content'], language)
-                
-                # Analizar frases clave
-                phrases = self.analyze_keyword_phrases(seo_data['main_content'], language)
-                
-                # Analizar estructura
-                structure = self.analyze_content_structure(seo_data)
-                
-                # Actualizar contadores globales
-                for word, count in keywords:
-                    all_keywords[word] += count
-                    
-                for phrase, count in phrases:
-                    all_phrases[phrase] += count
-                
-                # Guardar resultados individuales
-                result = {
-                    'url': url,
-                    'domain': seo_data.get('domain', urlparse(url).netloc),
-                    'title': seo_data.get('title', ''),
-                    'meta_description': seo_data.get('meta_description', ''),
-                    'top_keywords': keywords[:10],
-                    'top_phrases': phrases[:10],
-                    'structure': structure
-                }
-                
-                # Añadir análisis de keyword específica si se proporcionó
-                if target_keyword and 'keyword_analysis' in seo_data:
-                    result['keyword_analysis'] = seo_data['keyword_analysis']
-                
-                # Añadir posición en buscadores si está disponible
-                if target_keyword and 'search_position' in seo_data:
-                    result['search_position'] = seo_data['search_position']
-                
-                # Añadir keywords relacionadas si están disponibles
-                if target_keyword and 'related_keywords' in seo_data:
-                    result['related_keywords'] = seo_data['related_keywords']
-                
-                results.append(result)
-            except Exception as e:
-                print(f"Error al analizar {url}: {str(e)}")
-                continue
-            
-            # Pausa entre solicitudes para evitar bloqueos
-            time.sleep(2)
-        
-        # Calcular palabras y frases clave comunes entre competidores
-        common_analysis = {
-            'common_keywords': all_keywords.most_common(30),
-            'common_phrases': all_phrases.most_common(20)
-        }
-        
-        return {
-            'individual_results': results,
-            'common_analysis': common_analysis,
-            'target_keyword': target_keyword,
-            'related_keywords': related_keywords
-        }
-    
-    def generate_report(self, comparison_results, output_format='excel'):
-        """Genera un informe basado en los resultados del análisis"""
-        if not comparison_results['individual_results']:
-            print("No hay datos suficientes para generar un informe detallado.")
-            print("Generando informe mínimo con la información disponible.")
-            
-            # Generar un informe mínimo
-            output_file = f"{self.results_dir}/seo_analysis_minimal.txt"
-            with open(output_file, 'w', encoding='utf-8') as f:
-                f.write("=== ANÁLISIS SEO BÁSICO ===\n\n")
-                f.write("No se encontraron datos suficientes para un análisis completo.\n")
-                f.write("Posibles razones:\n")
-                f.write("- Las URLs no son accesibles\n")
-                f.write("- El sitio bloquea el scraping\n")
-                f.write("- Hubo errores al procesar el contenido\n\n")
-                
-                f.write("Recomendaciones:\n")
-                f.write("- Intenta con otras URLs\n")
-                f.write("- Verifica que los sitios estén en línea\n")
-                f.write("- Usa sitios que no bloqueen la extracción de contenido\n")
-            
-            return output_file
-            
-        # Si llegamos aquí, hay al menos algunos datos para analizar
-        domain_names = [result['domain'] for result in comparison_results['individual_results']]
-        target_keyword = comparison_results.get('target_keyword')
-        related_keywords = comparison_results.get('related_keywords', [])
-        
-        # Crear un resumen de estructura para comparación
-        structure_data = []
-        for result in comparison_results['individual_results']:
-            data = {'domain': result['domain']}
-            data.update(result['structure'])
-            structure_data.append(data)
-        
-        structure_df = pd.DataFrame(structure_data)
-        
-        # Generar el informe según el formato solicitado
-        timestamp = time.strftime("%Y%m%d-%H%M%S")
-        
-        if output_format == 'json':
-            # Guardar resultados como JSON
-            output_file = f"{self.results_dir}/seo_analysis.json"
-            with open(output_file, 'w', encoding='utf-8') as f:
-                # Convertir a un diccionario serializable
-                serializable_results = {
-                    'individual_results': [],
-                    'common_analysis': comparison_results['common_analysis'],
-                    'target_keyword': comparison_results.get('target_keyword'),
-                    'related_keywords': related_keywords
-                }
-                
-                # Procesar cada resultado individual
-                for result in comparison_results['individual_results']:
-                    serializable_result = {
-                        'url': result['url'],
-                        'domain': result['domain'],
-                        'title': result['title'],
-                        'meta_description': result['meta_description'],
-                        'top_keywords': result['top_keywords'],
-                        'top_phrases': result['top_phrases'],
-                        'structure': result['structure']
-                    }
-                    
-                    if 'keyword_analysis' in result:
-                        serializable_result['keyword_analysis'] = result['keyword_analysis']
-                    
-                    if 'search_position' in result:
-                        serializable_result['search_position'] = result['search_position']
-                        
-                    serializable_results['individual_results'].append(serializable_result)
-                
-                json.dump(serializable_results, f, ensure_ascii=False, indent=4)
-            return output_file
-            
-        elif output_format in ['excel', 'xlsx']:
-            # Guardar resultados en Excel
-            output_file = f"{self.results_dir}/seo_analysis.xlsx"
-            
-            try:
-                # Crear un writer de Excel
-                with pd.ExcelWriter(output_file) as writer:
-                    # Hoja de resumen
-                    summary_data = []
-                    for result in comparison_results['individual_results']:
-                        domain_data = {
-                            'Dominio': result['domain'],
-                            'URL': result['url'],
-                            'Título': result['title'],
-                            'Meta Descripción': result['meta_description'],
-                            'Longitud Título': len(result['title']),
-                            'Longitud Meta Descripción': len(result['meta_description']),
-                            'H1': result['structure']['h1_count'],
-                            'H2': result['structure']['h2_count'],
-                            'H3': result['structure']['h3_count'],
-                            'Párrafos': result['structure']['paragraph_count'],
-                            'Enlaces Internos': result['structure']['internal_link_count'],
-                            'Enlaces Externos': result['structure']['external_link_count'],
-                            'Imágenes': result['structure']['image_count'],
-                            'Imágenes con Alt': result['structure']['images_with_alt'],
-                            'Tiene Schema': 'Sí' if result['structure']['has_schema'] else 'No',
-                            'Tipos de Schema': ', '.join(result['structure']['schema_types']),
-                        }
-                        
-                        # Añadir análisis de keyword específica si está disponible
-                        if target_keyword and 'keyword_analysis' in result:
-                            keyword_analysis = result['keyword_analysis']
-                            domain_data.update({
-                                f'Keyword: {target_keyword}': 'Análisis',
-                                'Keyword en Título': 'Sí' if keyword_analysis.get('in_title', False) else 'No',
-                                'Keyword en Meta Desc': 'Sí' if keyword_analysis.get('in_meta_description', False) else 'No',
-                                'Keyword en URL': 'Sí' if keyword_analysis.get('in_url', False) else 'No',
-                                'Keyword en H1': 'Sí' if keyword_analysis.get('in_h1', False) else 'No',
-                                'Keyword en H2': 'Sí' if keyword_analysis.get('in_h2', False) else 'No',
-                                'Keyword en Primer Párrafo': 'Sí' if keyword_analysis.get('in_first_paragraph', False) else 'No',
-                                'Keyword en Alt de Imágenes': 'Sí' if keyword_analysis.get('in_img_alt', False) else 'No',
-                                'Keyword en Nombres de Imágenes': 'Sí' if keyword_analysis.get('in_img_filename', False) else 'No',
-                                'Keyword en Enlaces Internos': 'Sí' if keyword_analysis.get('in_internal_links_text', False) else 'No',
-                                'Conteo de Keyword': keyword_analysis.get('keyword_count', 0),
-                                'Densidad de Keyword (%)': keyword_analysis.get('keyword_density', 0),
-                                'Puntaje SEO (1-100)': keyword_analysis.get('seo_score', 0),
-                            })
-                            
-                        # Añadir información de posicionamiento si está disponible
-                        if target_keyword and 'search_position' in result:
-                            position_data = result['search_position']
-                            
-                            # Determinar si se usó API real
-                            api_used = position_data.get('api_used', False)
-                            position_value = position_data.get('position', 'Desconocida')
-                            
-                            domain_data.update({
-                                'Posición en Buscadores': position_value,
-                                'Rango de Posición': position_data.get('position_range', 'N/A'),
-                                'Confianza de la Estimación': position_data.get('confidence', 'N/A'),
-                                'Top 10': 'Sí' if position_data.get('top_10', False) else 'No',
-                                'Top 30': 'Sí' if position_data.get('top_30', False) else 'No',
-                                'API Google Utilizada': 'Sí' if api_used else 'No'
-                            })
-                        
-                        summary_data.append(domain_data)
-                    
-                    if summary_data:
-                        summary_df = pd.DataFrame(summary_data)
-                        summary_df.to_excel(writer, sheet_name='Resumen SEO', index=False)
-                    else:
-                        # Si no hay datos de resumen, crear una hoja vacía con mensaje
-                        pd.DataFrame([{'Mensaje': 'No hay datos suficientes para el resumen'}]).to_excel(writer, sheet_name='Resumen SEO', index=False)
-                    
-                    # Hoja de estructura detallada
-                    structure_df.to_excel(writer, sheet_name='Estructura', index=False)
-                    
-                    # Hoja de palabras clave comunes
-                    common_keywords_df = pd.DataFrame(comparison_results['common_analysis']['common_keywords'], 
-                                                    columns=['Palabra', 'Frecuencia'])
-                    common_keywords_df.to_excel(writer, sheet_name='Keywords Comunes', index=False)
-                    
-                    # Hoja de frases comunes
-                    common_phrases_df = pd.DataFrame(comparison_results['common_analysis']['common_phrases'], 
-                                                columns=['Frase', 'Frecuencia'])
-                    common_phrases_df.to_excel(writer, sheet_name='Frases Comunes', index=False)
-                    
-                    # Hoja de keywords relacionadas si hay keyword objetivo
-                    if target_keyword and related_keywords:
-                        related_kw_df = pd.DataFrame({'Keyword Relacionada': related_keywords})
-                        related_kw_df.to_excel(writer, sheet_name='Keywords Relacionadas', index=False)
-                    
-                    # Hoja con posicionamiento en buscadores
-                    if target_keyword:
-                        position_data = []
-                        for result in comparison_results['individual_results']:
-                            if 'search_position' in result:
-                                pos = result['search_position']
-                                position_data.append({
-                                    'Dominio': result['domain'],
-                                    'URL': result['url'],
-                                    'Posición Estimada': pos.get('position', 'Desconocida'),
-                                    'Rango de Posición': pos.get('position_range', 'N/A'),
-                                    'Confianza': pos.get('confidence', 'N/A'),
-                                    'Top 10': 'Sí' if pos.get('top_10', False) else 'No',
-                                    'Top 30': 'Sí' if pos.get('top_30', False) else 'No',
-                                    'Top 100': 'Sí' if pos.get('top_100', False) else 'No',
-                                    'API Google Utilizada': 'Sí' if pos.get('api_used', False) else 'No'
-                                })
-                        
-                        if position_data:
-                            position_df = pd.DataFrame(position_data)
-                            position_df.to_excel(writer, sheet_name='Posicionamiento', index=False)
-                    
-                    # Hojas individuales para cada dominio
-                    for result in comparison_results['individual_results']:
-                        domain = result['domain']
-                        safe_domain = ''.join(c for c in domain[:10] if c.isalnum())
-                        
-                        # Encabezados
-                        headers_data = []
-                        if result['structure'].get('h1_tags'):
-                            for h1 in result['structure']['h1_tags']:
-                                headers_data.append({'Tipo': 'H1', 'Texto': h1})
-                        if result['structure'].get('h2_tags'):
-                            for h2 in result['structure']['h2_tags']:
-                                headers_data.append({'Tipo': 'H2', 'Texto': h2})
-                        
-                        if headers_data:
-                            headers_df = pd.DataFrame(headers_data)
-                            headers_df.to_excel(writer, sheet_name=f'{safe_domain}_Headers', index=False)
-                        
-                        # Keywords de este dominio
-                        if result['top_keywords']:
-                            domain_keywords_df = pd.DataFrame(result['top_keywords'], columns=['Palabra', 'Frecuencia'])
-                            domain_keywords_df.to_excel(writer, sheet_name=f'{safe_domain}_Keywords', index=False)
-                        
-                        # Frases de este dominio
-                        if result['top_phrases']:
-                            domain_phrases_df = pd.DataFrame(result['top_phrases'], columns=['Frase', 'Frecuencia'])
-                            domain_phrases_df.to_excel(writer, sheet_name=f'{safe_domain}_Frases', index=False)
-                        
-                        # Análisis específico de keyword si está disponible
-                        if target_keyword and 'keyword_analysis' in result:
-                            kw_analysis = result['keyword_analysis']
-                            
-                            # Datos generales
-                            kw_general_data = [
-                                {'Métrica': 'Keyword', 'Valor': target_keyword},
-                                {'Métrica': 'Conteo de Keyword', 'Valor': kw_analysis.get('keyword_count', 0)},
-                                {'Métrica': 'Densidad de Keyword (%)', 'Valor': kw_analysis.get('keyword_density', 0)},
-                                {'Métrica': 'Keyword en Título', 'Valor': 'Sí' if kw_analysis.get('in_title', False) else 'No'},
-                                {'Métrica': 'Keyword en Meta Descripción', 'Valor': 'Sí' if kw_analysis.get('in_meta_description', False) else 'No'},
-                                {'Métrica': 'Keyword en URL', 'Valor': 'Sí' if kw_analysis.get('in_url', False) else 'No'},
-                                {'Métrica': 'Keyword en H1', 'Valor': 'Sí' if kw_analysis.get('in_h1', False) else 'No'},
-                                {'Métrica': 'Keyword en H2', 'Valor': 'Sí' if kw_analysis.get('in_h2', False) else 'No'},
-                                {'Métrica': 'Keyword en Primer Párrafo', 'Valor': 'Sí' if kw_analysis.get('in_first_paragraph', False) else 'No'},
-                                {'Métrica': 'Keyword en Atributos Alt', 'Valor': 'Sí' if kw_analysis.get('in_img_alt', False) else 'No'},
-                                {'Métrica': 'Keyword en Nombres de Archivos', 'Valor': 'Sí' if kw_analysis.get('in_img_filename', False) else 'No'},
-                                {'Métrica': 'Keyword en Texto de Enlaces', 'Valor': 'Sí' if kw_analysis.get('in_internal_links_text', False) else 'No'},
-                                {'Métrica': 'Puntaje SEO (1-100)', 'Valor': kw_analysis.get('seo_score', 0)},
-                            ]
-                            
-                            # Añadir datos de posicionamiento si están disponibles
-                            if 'search_position' in result:
-                                pos = result['search_position']
-                                kw_general_data.extend([
-                                    {'Métrica': 'Posición Estimada', 'Valor': pos.get('position', 'Desconocida')},
-                                    {'Métrica': 'Rango de Posición', 'Valor': pos.get('position_range', 'N/A')},
-                                    {'Métrica': 'Confianza', 'Valor': pos.get('confidence', 'N/A')},
-                                    {'Métrica': 'En Top 10', 'Valor': 'Sí' if pos.get('top_10', False) else 'No'},
-                                    {'Métrica': 'En Top 30', 'Valor': 'Sí' if pos.get('top_30', False) else 'No'},
-                                    {'Métrica': 'API Google Utilizada', 'Valor': 'Sí' if pos.get('api_used', False) else 'No'}
-                                ])
-                            
-                            kw_general_df = pd.DataFrame(kw_general_data)
-                            kw_general_df.to_excel(writer, sheet_name=f'{safe_domain}_KW', index=False)
-                            
-                            # Keywords similares
-                            if kw_analysis.get('similar_keywords'):
-                                similar_kw_data = []
-                                for kw, sim in kw_analysis['similar_keywords']:
-                                    count = kw_analysis['similar_keywords_counts'].get(kw, 0)
-                                    similar_kw_data.append({
-                                        'Keyword Similar': kw,
-                                        'Similitud (%)': sim,
-                                        'Frecuencia': count
-                                    })
-                                
-                                similar_kw_df = pd.DataFrame(similar_kw_data)
-                                similar_kw_df.to_excel(writer, sheet_name=f'{safe_domain}_KWSim', index=False)
-                
-                return output_file
-            except Exception as e:
-                print(f"Error al generar Excel: {str(e)}")
-                # En caso de error, crear un informe de texto
-                output_file = f"{self.results_dir}/seo_analysis_error.txt"
-                with open(output_file, 'w', encoding='utf-8') as f:
-                    f.write(f"Error al generar informe Excel: {str(e)}\n")
-                    f.write("Se recomienda utilizar el formato 'text' o 'json' en su lugar.")
-                return output_file
-            
-        else:  # Formato de texto por defecto
-            output_file = f"{self.results_dir}/seo_analysis.txt"
-            
-            with open(output_file, 'w', encoding='utf-8') as f:
-                f.write("=== ANÁLISIS SEO AVANZADO ===\n\n")
-                
-                # Escribir resumen general
-                f.write("== DOMINIOS ANALIZADOS ==\n")
-                for domain in domain_names:
-                    f.write(f"- {domain}\n")
-                f.write("\n")
-                
-                if target_keyword:
-                    f.write(f"== KEYWORD OBJETIVO: {target_keyword} ==\n\n")
-                    
-                    # Escribir keywords relacionadas
-                    if related_keywords:
-                        f.write("== KEYWORDS RELACIONADAS ==\n")
-                        for kw in related_keywords:
-                            f.write(f"- {kw}\n")
-                        f.write("\n")
-                
-                # Escribir palabras clave comunes
-                f.write("== PALABRAS CLAVE COMUNES ==\n")
-                for word, count in comparison_results['common_analysis']['common_keywords'][:15]:
-                    f.write(f"{word}: {count}\n")
-                f.write("\n")
-                
-                # Escribir frases clave comunes
-                f.write("== FRASES CLAVE COMUNES ==\n")
-                for phrase, count in comparison_results['common_analysis']['common_phrases'][:10]:
-                    f.write(f"{phrase}: {count}\n")
-                f.write("\n")
-                
-                # Posicionamiento general
-                if target_keyword:
-                    f.write("== POSICIONAMIENTO PARA KEYWORD ==\n")
-                    for result in comparison_results['individual_results']:
-                        if 'search_position' in result:
-                            pos = result['search_position']
-                            api_used = 'Sí' if pos.get('api_used', False) else 'No'
-                            f.write(f"{result['domain']}:\n")
-                            f.write(f"  - Posición estimada: {pos.get('position', 'Desconocida')}\n")
-                            f.write(f"  - Rango: {pos.get('position_range', 'N/A')}\n")
-                            f.write(f"  - Confianza: {pos.get('confidence', 'N/A')}\n")
-                            f.write(f"  - Top 10: {'Sí' if pos.get('top_10', False) else 'No'}\n")
-                            f.write(f"  - Top 30: {'Sí' if pos.get('top_30', False) else 'No'}\n")
-                            f.write(f"  - API Google utilizada: {api_used}\n")
-                    f.write("\n")
-                
-                # Escribir análisis individual
-                f.write("== ANÁLISIS INDIVIDUAL ==\n")
-                for result in comparison_results['individual_results']:
-                    f.write(f"\n--- {result['domain']} ---\n")
-                    f.write(f"URL: {result['url']}\n")
-                    f.write(f"Título: {result['title']}\n")
-                    f.write(f"Meta Descripción: {result['meta_description']}\n")
-                    
-                    f.write("\nEstructura:\n")
-                    f.write(f"- H1: {result['structure']['h1_count']}\n")
-                    f.write(f"- H2: {result['structure']['h2_count']}\n")
-                    f.write(f"- H3: {result['structure']['h3_count']}\n")
-                    f.write(f"- Párrafos: {result['structure']['paragraph_count']}\n")
-                    f.write(f"- Enlaces Internos: {result['structure']['internal_link_count']}\n")
-                    f.write(f"- Enlaces Externos: {result['structure']['external_link_count']}\n")
-                    f.write(f"- Imágenes: {result['structure']['image_count']}\n")
-                    f.write(f"- Imágenes con Alt: {result['structure']['images_with_alt']}\n")
-                    
-                    f.write("\nSchema.org:\n")
-                    if result['structure']['has_schema']:
-                        f.write(f"- Tipos: {', '.join(result['structure']['schema_types'])}\n")
-                    else:
-                        f.write("- No se detectaron datos estructurados\n")
-                    
-                    f.write("\nPalabras clave principales:\n")
-                    for word, count in result['top_keywords']:
-                        f.write(f"- {word}: {count}\n")
-                    
-                    f.write("\nFrases clave principales:\n")
-                    for phrase, count in result['top_phrases']:
-                        f.write(f"- {phrase}: {count}\n")
-                    
-                    # Escribir análisis de keyword específica si está disponible
-                    if target_keyword and 'keyword_analysis' in result:
-                        kw = result['keyword_analysis']
-                        f.write(f"\nAnálisis de keyword: {target_keyword}\n")
-                        f.write(f"- Conteo: {kw.get('keyword_count', 0)}\n")
-                        f.write(f"- Densidad: {kw.get('keyword_density', 0)}%\n")
-                        f.write(f"- En título: {'Sí' if kw.get('in_title', False) else 'No'}\n")
-                        f.write(f"- En meta descripción: {'Sí' if kw.get('in_meta_description', False) else 'No'}\n")
-                        f.write(f"- En URL: {'Sí' if kw.get('in_url', False) else 'No'}\n")
-                        f.write(f"- En H1: {'Sí' if kw.get('in_h1', False) else 'No'}\n")
-                        f.write(f"- En H2: {'Sí' if kw.get('in_h2', False) else 'No'}\n")
-                        f.write(f"- En primer párrafo: {'Sí' if kw.get('in_first_paragraph', False) else 'No'}\n")
-                        f.write(f"- En alt de imágenes: {'Sí' if kw.get('in_img_alt', False) else 'No'}\n")
-                        f.write(f"- En nombres de archivos: {'Sí' if kw.get('in_img_filename', False) else 'No'}\n")
-                        f.write(f"- En texto de enlaces: {'Sí' if kw.get('in_internal_links_text', False) else 'No'}\n")
-                        f.write(f"- Puntaje SEO: {kw.get('seo_score', 0)}/100\n")
-                        
-                        f.write("\nKeywords similares:\n")
-                        for similar, score in kw.get('similar_keywords', []):
-                            count = kw.get('similar_keywords_counts', {}).get(similar, 0)
-                            f.write(f"- {similar}: similitud {score}%, frecuencia {count}\n")
-                    
-                    # Escribir información de posicionamiento si está disponible
-                    if target_keyword and 'search_position' in result:
-                        pos = result['search_position']
-                        api_used = 'Sí' if pos.get('api_used', False) else 'No'
-                        f.write(f"\nPosicionamiento en buscadores para '{target_keyword}':\n")
-                        f.write(f"- Posición estimada: {pos.get('position', 'Desconocida')}\n")
-                        f.write(f"- Rango de posición: {pos.get('position_range', 'N/A')}\n")
-                        f.write(f"- Confianza de la estimación: {pos.get('confidence', 'N/A')}\n")
-                        f.write(f"- En Top 10: {'Sí' if pos.get('top_10', False) else 'No'}\n")
-                        f.write(f"- En Top 30: {'Sí' if pos.get('top_30', False) else 'No'}\n")
-                        f.write(f"- En Top 100: {'Sí' if pos.get('top_100', False) else 'No'}\n")
-                        f.write(f"- API Google utilizada: {api_used}\n")
-                    
-                    f.write("\n")
-            
-            return output_file
-    
-    def visualize_results(self, comparison_results):
-        """Visualiza los resultados del análisis"""
-        # Verificar si hay datos para visualizar
-        if not comparison_results['individual_results']:
-            print("No hay datos suficientes para crear visualizaciones.")
-            return {}
-            
-        # Crear figuras para visualización
-        timestamp = time.strftime("%Y%m%d-%H%M%S")
-        charts = {}
-        
-        try:
-            # 1. Gráfico de barras para palabras clave comunes
-            plt.figure(figsize=(12, 6))
-            top_keywords = comparison_results['common_analysis']['common_keywords'][:10]
-            
-            if top_keywords:
-                words, counts = zip(*top_keywords)
-                plt.bar(words, counts)
-                plt.title('Palabras clave más comunes')
-                plt.xticks(rotation=45, ha='right')
-                plt.tight_layout()
-                keywords_chart = f"{self.results_dir}/keywords.png"
-                plt.savefig(keywords_chart)
-                charts['keywords_chart'] = keywords_chart
-            
-            # 2. Gráfico comparativo de estructura de contenido
-            if len(comparison_results['individual_results']) > 0:
-                plt.figure(figsize=(12, 8))
-                structure_data = []
-                domains = []
-                
-                for result in comparison_results['individual_results']:
-                    domains.append(result['domain'])
-                    structure_data.append([
-                        result['structure'].get('paragraph_count', 0),
-                        result['structure'].get('h1_count', 0) + result['structure'].get('h2_count', 0) + result['structure'].get('h3_count', 0),
-                        result['structure'].get('internal_link_count', 0),
-                        result['structure'].get('external_link_count', 0),
-                        result['structure'].get('image_count', 0)
-                    ])
-                
-                structure_df = pd.DataFrame(structure_data, 
-                                        index=domains,
-                                        columns=['Párrafos', 'Encabezados', 'Enlaces Internos', 'Enlaces Externos', 'Imágenes'])
-                
-                structure_df.plot(kind='bar', figsize=(12, 6))
-                plt.title('Comparación de estructura de contenido')
-                plt.ylabel('Cantidad')
-                plt.xticks(rotation=45, ha='right')
-                plt.tight_layout()
-                structure_chart = f"{self.results_dir}/structure.png"
-                plt.savefig(structure_chart)
-                charts['structure_chart'] = structure_chart
-                
-                # 3. Gráfico específico de análisis de keyword si está disponible
-                target_keyword = comparison_results.get('target_keyword')
-                if target_keyword:
-                    kw_data = []
-                    domains = []
-                    
-                    for result in comparison_results['individual_results']:
-                        if 'keyword_analysis' in result:
-                            domains.append(result['domain'])
-                            kw_analysis = result['keyword_analysis']
-                            kw_data.append([
-                                kw_analysis.get('keyword_density', 0),
-                                kw_analysis.get('keyword_count', 0),
-                                kw_analysis.get('seo_score', 0)
-                            ])
-                    
-                    if kw_data and domains:
-                        plt.figure(figsize=(12, 6))
-                        kw_df = pd.DataFrame(kw_data, 
-                                            index=domains,
-                                            columns=['Densidad (%)', 'Conteo', 'Puntaje SEO'])
-                        
-                        ax = kw_df.plot(kind='bar', figsize=(12, 6), secondary_y=['Puntaje SEO'])
-                        plt.title(f'Análisis de keyword: {target_keyword}')
-                        plt.ylabel('Densidad (%) / Conteo')
-                        ax.right_ax.set_ylabel('Puntaje SEO (1-100)')
-                        plt.xticks(rotation=45, ha='right')
-                        plt.tight_layout()
-                        keyword_chart = f"{self.results_dir}/keyword_analysis.png"
-                        plt.savefig(keyword_chart)
-                        charts['keyword_analysis_chart'] = keyword_chart
-                
-                # 4. Gráfico de posicionamiento en buscadores
-                if target_keyword:
-                    position_data = []
-                    domains = []
-                    
-                    for result in comparison_results['individual_results']:
-                        if 'search_position' in result:
-                            position = result['search_position']
-                            pos_value = position.get('position', 0)
-                            
-                            # Si no es un entero, tratar de convertirlo o usar un valor por defecto
-                            if not isinstance(pos_value, int):
-                                try:
-                                    if isinstance(pos_value, str) and pos_value.startswith('>'):
-                                        # Para ">100", usar 100
-                                        pos_value = 100
-                                    else:
-                                        pos_value = int(pos_value)
-                                except:
-                                    pos_value = 100  # Valor por defecto
-                            
-                            domains.append(result['domain'])
-                            position_data.append(pos_value)
-                    
-                    if position_data and domains:
-                        plt.figure(figsize=(12, 6))
-                        # Invertir el eje y para que las mejores posiciones estén arriba
-                        plt.bar(domains, position_data)
-                        plt.gca().invert_yaxis()  # Invertir para que posición 1 esté arriba
-                        plt.axhline(y=10, color='green', linestyle='--', label='Top 10')
-                        plt.axhline(y=30, color='orange', linestyle='--', label='Top 30')
-                        plt.axhline(y=50, color='red', linestyle='--', label='Top 50')
-                        plt.title(f'Posicionamiento para keyword: {target_keyword}')
-                        plt.ylabel('Posición en buscadores')
-                        plt.xlabel('Dominio')
-                        plt.xticks(rotation=45, ha='right')
-                        plt.legend()
-                        plt.tight_layout()
-                        position_chart = f"{self.results_dir}/position_analysis.png"
-                        plt.savefig(position_chart)
-                        charts['position_chart'] = position_chart
-                        
-                # 5. Gráfico de keywords relacionadas
-                if comparison_results.get('related_keywords'):
-                    related_keywords = comparison_results['related_keywords']
-                    plt.figure(figsize=(12, 10))
-                    
-                    # Limitar a las primeras 15 keywords relacionadas para mejor visualización
-                    if len(related_keywords) > 15:
-                        related_keywords = related_keywords[:15]
-                        
-                    # Crear un gráfico de barras horizontal para las keywords relacionadas
-                    y_pos = range(len(related_keywords))
-                    plt.barh(y_pos, [1] * len(related_keywords), color='skyblue')
-                    plt.yticks(y_pos, related_keywords)
-                    plt.title(f'Keywords relacionadas con: {target_keyword}')
-                    plt.xlabel('Sugerencia para creación de contenido')
-                    plt.tight_layout()
-                    related_chart = f"{self.results_dir}/related_keywords.png"
-                    plt.savefig(related_chart)
-                    charts['related_keywords_chart'] = related_chart
-                    
-        except Exception as e:
-            print(f"Error al crear visualizaciones: {str(e)}")
-            
-        return charts
-                        f.write(f"import requests
+import requests
 from bs4 import BeautifulSoup, Comment
 import re
 from collections import Counter, defaultdict
@@ -1343,3 +654,690 @@ class EnhancedSEOAnalyzer:
         # Tokenizar y limpiar el texto
         words = re.findall(r'\b\w+\b', text.lower())
         words = [word for word in words if word.isalnum() and len(word) >= min_length and word not in stop_words]
+        
+        # Contar frecuencias
+        word_freq = Counter(words)
+        
+        # Devolver las palabras más frecuentes
+        return word_freq.most_common(top_n)
+    
+    def analyze_keyword_phrases(self, text, language='es', min_length=2, max_length=4, top_n=20):
+        """Analiza frases clave (n-gramas) en el texto"""
+        if not text:
+            return []
+            
+        # Seleccionar stopwords según el idioma
+        stop_words = self.get_language_stopwords(language)
+        
+        # Tokenizar y limpiar el texto
+        words = re.findall(r'\b\w+\b', text.lower())
+        words = [word for word in words if word.isalnum() and word not in stop_words]
+        
+        # Generar n-gramas
+        phrases = []
+        for n in range(min_length, max_length + 1):
+            for i in range(len(words) - n + 1):
+                phrases.append(' '.join(words[i:i+n]))
+        
+        # Contar frecuencias
+        phrase_freq = Counter(phrases)
+        
+        # Devolver las frases más frecuentes
+        return phrase_freq.most_common(top_n)
+    
+    def analyze_content_structure(self, seo_data):
+        """Analiza la estructura del contenido"""
+        structure_analysis = {
+            'title_length': len(seo_data['title']),
+            'meta_description_length': len(seo_data['meta_description']),
+            'title': seo_data['title'],
+            'meta_description': seo_data['meta_description'],
+            'has_h1': len(seo_data['h1_tags']) > 0,
+            'h1_count': len(seo_data['h1_tags']),
+            'h2_count': len(seo_data['h2_tags']),
+            'h3_count': len(seo_data['h3_tags']),
+            'paragraph_count': len(seo_data['paragraphs']),
+            'avg_paragraph_length': sum(len(p) for p in seo_data['paragraphs']) / len(seo_data['paragraphs']) if seo_data['paragraphs'] else 0,
+            'internal_link_count': len(seo_data['internal_links']),
+            'external_link_count': len(seo_data['external_links']),
+            'image_count': len(seo_data['images']),
+            'images_with_alt': sum(1 for img in seo_data['images'] if img.get('alt')),
+            'schema_types': seo_data['schema_data'],
+            'has_schema': len(seo_data['schema_data']) > 0,
+            'h1_tags': seo_data['h1_tags'][:3] if seo_data['h1_tags'] else [],
+            'h2_tags': seo_data['h2_tags'][:5] if seo_data['h2_tags'] else [],
+        }
+        return structure_analysis
+    
+    def compare_competitors(self, urls, target_keyword=None, language='es'):
+        """Compara el contenido de múltiples competidores con enfoque en SEO"""
+        results = []
+        all_keywords = Counter()
+        all_phrases = Counter()
+        related_keywords = []
+        
+        # Si hay una keyword objetivo, generamos keywords relacionadas
+        if target_keyword:
+            related_keywords = self.generate_related_keywords(target_keyword, language)
+        
+        for url in urls:
+            print(f"Analizando: {url}")
+            seo_data = self.extract_content(url, target_keyword)
+            
+            if not seo_data:
+                print(f"No se pudo analizar {url}, continuando con la siguiente URL")
+                continue
+                
+            try:
+                # Analizar palabras clave
+                keywords = self.analyze_keywords(seo_data['main_content'], language)
+                
+                # Analizar frases clave
+                phrases = self.analyze_keyword_phrases(seo_data['main_content'], language)
+                
+                # Analizar estructura
+                structure = self.analyze_content_structure(seo_data)
+                
+                # Actualizar contadores globales
+                for word, count in keywords:
+                    all_keywords[word] += count
+                    
+                for phrase, count in phrases:
+                    all_phrases[phrase] += count
+                
+                # Guardar resultados individuales
+                result = {
+                    'url': url,
+                    'domain': seo_data.get('domain', urlparse(url).netloc),
+                    'title': seo_data.get('title', ''),
+                    'meta_description': seo_data.get('meta_description', ''),
+                    'top_keywords': keywords[:10],
+                    'top_phrases': phrases[:10],
+                    'structure': structure
+                }
+                
+                # Añadir análisis de keyword específica si se proporcionó
+                if target_keyword and 'keyword_analysis' in seo_data:
+                    result['keyword_analysis'] = seo_data['keyword_analysis']
+                
+                # Añadir posición en buscadores si está disponible
+                if target_keyword and 'search_position' in seo_data:
+                    result['search_position'] = seo_data['search_position']
+                
+                # Añadir keywords relacionadas si están disponibles
+                if target_keyword and 'related_keywords' in seo_data:
+                    result['related_keywords'] = seo_data['related_keywords']
+                
+                results.append(result)
+            except Exception as e:
+                print(f"Error al analizar {url}: {str(e)}")
+                continue
+            
+            # Pausa entre solicitudes para evitar bloqueos
+            time.sleep(2)
+        
+        # Calcular palabras y frases clave comunes entre competidores
+        common_analysis = {
+            'common_keywords': all_keywords.most_common(30),
+            'common_phrases': all_phrases.most_common(20)
+        }
+        
+        return {
+            'individual_results': results,
+            'common_analysis': common_analysis,
+            'target_keyword': target_keyword,
+            'related_keywords': related_keywords
+        }
+    
+    def generate_report(self, comparison_results, output_format='excel'):
+        """Genera un informe basado en los resultados del análisis"""
+        if not comparison_results['individual_results']:
+            print("No hay datos suficientes para generar un informe detallado.")
+            print("Generando informe mínimo con la información disponible.")
+            
+            # Generar un informe mínimo
+            output_file = f"{self.results_dir}/seo_analysis_minimal.txt"
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write("=== ANÁLISIS SEO BÁSICO ===\n\n")
+                f.write("No se encontraron datos suficientes para un análisis completo.\n")
+                f.write("Posibles razones:\n")
+                f.write("- Las URLs no son accesibles\n")
+                f.write("- El sitio bloquea el scraping\n")
+                f.write("- Hubo errores al procesar el contenido\n\n")
+                
+                f.write("Recomendaciones:\n")
+                f.write("- Intenta con otras URLs\n")
+                f.write("- Verifica que los sitios estén en línea\n")
+                f.write("- Usa sitios que no bloqueen la extracción de contenido\n")
+            
+            return output_file
+    
+    def visualize_results(self, comparison_results):
+        """Visualiza los resultados del análisis"""
+        # Verificar si hay datos para visualizar
+        if not comparison_results['individual_results']:
+            print("No hay datos suficientes para crear visualizaciones.")
+            return {}
+            
+        # Crear figuras para visualización
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        charts = {}
+        
+        try:
+            # 1. Gráfico de barras para palabras clave comunes
+            plt.figure(figsize=(12, 6))
+            top_keywords = comparison_results['common_analysis']['common_keywords'][:10]
+            
+            if top_keywords:
+                words, counts = zip(*top_keywords)
+                plt.bar(words, counts)
+                plt.title('Palabras clave más comunes')
+                plt.xticks(rotation=45, ha='right')
+                plt.tight_layout()
+                keywords_chart = f"{self.results_dir}/keywords.png"
+                plt.savefig(keywords_chart)
+                charts['keywords_chart'] = keywords_chart
+            
+            # 2. Gráfico comparativo de estructura de contenido
+            if len(comparison_results['individual_results']) > 0:
+                plt.figure(figsize=(12, 8))
+                structure_data = []
+                domains = []
+                
+                for result in comparison_results['individual_results']:
+                    domains.append(result['domain'])
+                    structure_data.append([
+                        result['structure'].get('paragraph_count', 0),
+                        result['structure'].get('h1_count', 0) + result['structure'].get('h2_count', 0) + result['structure'].get('h3_count', 0),
+                        result['structure'].get('internal_link_count', 0),
+                        result['structure'].get('external_link_count', 0),
+                        result['structure'].get('image_count', 0)
+                    ])
+                
+                structure_df = pd.DataFrame(structure_data, 
+                                        index=domains,
+                                        columns=['Párrafos', 'Encabezados', 'Enlaces Internos', 'Enlaces Externos', 'Imágenes'])
+                
+                structure_df.plot(kind='bar', figsize=(12, 6))
+                plt.title('Comparación de estructura de contenido')
+                plt.ylabel('Cantidad')
+                plt.xticks(rotation=45, ha='right')
+                plt.tight_layout()
+                structure_chart = f"{self.results_dir}/structure.png"
+                plt.savefig(structure_chart)
+                charts['structure_chart'] = structure_chart
+                
+                # 3. Gráfico específico de análisis de keyword si está disponible
+                target_keyword = comparison_results.get('target_keyword')
+                if target_keyword:
+                    kw_data = []
+                    domains = []
+                    
+                    for result in comparison_results['individual_results']:
+                        if 'keyword_analysis' in result:
+                            domains.append(result['domain'])
+                            kw_analysis = result['keyword_analysis']
+                            kw_data.append([
+                                kw_analysis.get('keyword_density', 0),
+                                kw_analysis.get('keyword_count', 0),
+                                kw_analysis.get('seo_score', 0)
+                            ])
+                    
+                    if kw_data and domains:
+                        plt.figure(figsize=(12, 6))
+                        kw_df = pd.DataFrame(kw_data, 
+                                            index=domains,
+                                            columns=['Densidad (%)', 'Conteo', 'Puntaje SEO'])
+                        
+                        ax = kw_df.plot(kind='bar', figsize=(12, 6), secondary_y=['Puntaje SEO'])
+                        plt.title(f'Análisis de keyword: {target_keyword}')
+                        plt.ylabel('Densidad (%) / Conteo')
+                        ax.right_ax.set_ylabel('Puntaje SEO (1-100)')
+                        plt.xticks(rotation=45, ha='right')
+                        plt.tight_layout()
+                        keyword_chart = f"{self.results_dir}/keyword_analysis.png"
+                        plt.savefig(keyword_chart)
+                        charts['keyword_analysis_chart'] = keyword_chart
+                
+                # 4. Gráfico de posicionamiento en buscadores
+                if target_keyword:
+                    position_data = []
+                    domains = []
+                    
+                    for result in comparison_results['individual_results']:
+                        if 'search_position' in result:
+                            position = result['search_position']
+                            pos_value = position.get('position', 0)
+                            
+                            # Si no es un entero, tratar de convertirlo o usar un valor por defecto
+                            if not isinstance(pos_value, int):
+                                try:
+                                    if isinstance(pos_value, str) and pos_value.startswith('>'):
+                                        # Para ">100", usar 100
+                                        pos_value = 100
+                                    else:
+                                        pos_value = int(pos_value)
+                                except:
+                                    pos_value = 100  # Valor por defecto
+                            
+                            domains.append(result['domain'])
+                            position_data.append(pos_value)
+                    
+                    if position_data and domains:
+                        plt.figure(figsize=(12, 6))
+                        # Invertir el eje y para que las mejores posiciones estén arriba
+                        plt.bar(domains, position_data)
+                        plt.gca().invert_yaxis()  # Invertir para que posición 1 esté arriba
+                        plt.axhline(y=10, color='green', linestyle='--', label='Top 10')
+                        plt.axhline(y=30, color='orange', linestyle='--', label='Top 30')
+                        plt.axhline(y=50, color='red', linestyle='--', label='Top 50')
+                        plt.title(f'Posicionamiento para keyword: {target_keyword}')
+                        plt.ylabel('Posición en buscadores')
+                        plt.xlabel('Dominio')
+                        plt.xticks(rotation=45, ha='right')
+                        plt.legend()
+                        plt.tight_layout()
+                        position_chart = f"{self.results_dir}/position_analysis.png"
+                        plt.savefig(position_chart)
+                        charts['position_chart'] = position_chart
+                        
+                # 5. Gráfico de keywords relacionadas
+                if comparison_results.get('related_keywords'):
+                    related_keywords = comparison_results['related_keywords']
+                    plt.figure(figsize=(12, 10))
+                    
+                    # Limitar a las primeras 15 keywords relacionadas para mejor visualización
+                    if len(related_keywords) > 15:
+                        related_keywords = related_keywords[:15]
+                        
+                    # Crear un gráfico de barras horizontal para las keywords relacionadas
+                    y_pos = range(len(related_keywords))
+                    plt.barh(y_pos, [1] * len(related_keywords), color='skyblue')
+                    plt.yticks(y_pos, related_keywords)
+                    plt.title(f'Keywords relacionadas con: {target_keyword}')
+                    plt.xlabel('Sugerencia para creación de contenido')
+                    plt.tight_layout()
+                    related_chart = f"{self.results_dir}/related_keywords.png"
+                    plt.savefig(related_chart)
+                    charts['related_keywords_chart'] = related_chart
+                    
+        except Exception as e:
+            print(f"Error al crear visualizaciones: {str(e)}")
+            
+        return charts
+
+            
+        elif output_format in ['excel', 'xlsx']:
+            # Guardar resultados en Excel
+            output_file = f"{self.results_dir}/seo_analysis.xlsx"
+            
+            try:
+                # Crear un writer de Excel
+                with pd.ExcelWriter(output_file) as writer:
+                    # Hoja de resumen
+                    summary_data = []
+                    for result in comparison_results['individual_results']:
+                        domain_data = {
+                            'Dominio': result['domain'],
+                            'URL': result['url'],
+                            'Título': result['title'],
+                            'Meta Descripción': result['meta_description'],
+                            'Longitud Título': len(result['title']),
+                            'Longitud Meta Descripción': len(result['meta_description']),
+                            'H1': result['structure']['h1_count'],
+                            'H2': result['structure']['h2_count'],
+                            'H3': result['structure']['h3_count'],
+                            'Párrafos': result['structure']['paragraph_count'],
+                            'Enlaces Internos': result['structure']['internal_link_count'],
+                            'Enlaces Externos': result['structure']['external_link_count'],
+                            'Imágenes': result['structure']['image_count'],
+                            'Imágenes con Alt': result['structure']['images_with_alt'],
+                            'Tiene Schema': 'Sí' if result['structure']['has_schema'] else 'No',
+                            'Tipos de Schema': ', '.join(result['structure']['schema_types']),
+                        }
+                        
+                        # Añadir análisis de keyword específica si está disponible
+                        if target_keyword and 'keyword_analysis' in result:
+                            keyword_analysis = result['keyword_analysis']
+                            domain_data.update({
+                                f'Keyword: {target_keyword}': 'Análisis',
+                                'Keyword en Título': 'Sí' if keyword_analysis.get('in_title', False) else 'No',
+                                'Keyword en Meta Desc': 'Sí' if keyword_analysis.get('in_meta_description', False) else 'No',
+                                'Keyword en URL': 'Sí' if keyword_analysis.get('in_url', False) else 'No',
+                                'Keyword en H1': 'Sí' if keyword_analysis.get('in_h1', False) else 'No',
+                                'Keyword en H2': 'Sí' if keyword_analysis.get('in_h2', False) else 'No',
+                                'Keyword en Primer Párrafo': 'Sí' if keyword_analysis.get('in_first_paragraph', False) else 'No',
+                                'Keyword en Alt de Imágenes': 'Sí' if keyword_analysis.get('in_img_alt', False) else 'No',
+                                'Keyword en Nombres de Imágenes': 'Sí' if keyword_analysis.get('in_img_filename', False) else 'No',
+                                'Keyword en Enlaces Internos': 'Sí' if keyword_analysis.get('in_internal_links_text', False) else 'No',
+                                'Conteo de Keyword': keyword_analysis.get('keyword_count', 0),
+                                'Densidad de Keyword (%)': keyword_analysis.get('keyword_density', 0),
+                                'Puntaje SEO (1-100)': keyword_analysis.get('seo_score', 0),
+                            })
+                            
+                        # Añadir información de posicionamiento si está disponible
+                        if target_keyword and 'search_position' in result:
+                            position_data = result['search_position']
+                            
+                            # Determinar si se usó API real
+                            api_used = position_data.get('api_used', False)
+                            position_value = position_data.get('position', 'Desconocida')
+                            
+                            domain_data.update({
+                                'Posición en Buscadores': position_value,
+                                'Rango de Posición': position_data.get('position_range', 'N/A'),
+                                'Confianza de la Estimación': position_data.get('confidence', 'N/A'),
+                                'Top 10': 'Sí' if position_data.get('top_10', False) else 'No',
+                                'Top 30': 'Sí' if position_data.get('top_30', False) else 'No',
+                                'API Google Utilizada': 'Sí' if api_used else 'No'
+                            })
+                        
+                        summary_data.append(domain_data)
+                    
+                    if summary_data:
+                        summary_df = pd.DataFrame(summary_data)
+                        summary_df.to_excel(writer, sheet_name='Resumen SEO', index=False)
+                    else:
+                        # Si no hay datos de resumen, crear una hoja vacía con mensaje
+                        pd.DataFrame([{'Mensaje': 'No hay datos suficientes para el resumen'}]).to_excel(writer, sheet_name='Resumen SEO', index=False)
+                    
+                    # Hoja de estructura detallada
+                    structure_df.to_excel(writer, sheet_name='Estructura', index=False)
+                    
+                    # Hoja de palabras clave comunes
+                    common_keywords_df = pd.DataFrame(comparison_results['common_analysis']['common_keywords'], 
+                                                    columns=['Palabra', 'Frecuencia'])
+                    common_keywords_df.to_excel(writer, sheet_name='Keywords Comunes', index=False)
+                    
+                    # Hoja de frases comunes
+                    common_phrases_df = pd.DataFrame(comparison_results['common_analysis']['common_phrases'], 
+                                                columns=['Frase', 'Frecuencia'])
+                    common_phrases_df.to_excel(writer, sheet_name='Frases Comunes', index=False)
+                    
+                    # Hoja de keywords relacionadas si hay keyword objetivo
+                    if target_keyword and related_keywords:
+                        related_kw_df = pd.DataFrame({'Keyword Relacionada': related_keywords})
+                        related_kw_df.to_excel(writer, sheet_name='Keywords Relacionadas', index=False)
+                    
+                    # Hoja con posicionamiento en buscadores
+                    if target_keyword:
+                        position_data = []
+                        for result in comparison_results['individual_results']:
+                            if 'search_position' in result:
+                                pos = result['search_position']
+                                position_data.append({
+                                    'Dominio': result['domain'],
+                                    'URL': result['url'],
+                                    'Posición Estimada': pos.get('position', 'Desconocida'),
+                                    'Rango de Posición': pos.get('position_range', 'N/A'),
+                                    'Confianza': pos.get('confidence', 'N/A'),
+                                    'Top 10': 'Sí' if pos.get('top_10', False) else 'No',
+                                    'Top 30': 'Sí' if pos.get('top_30', False) else 'No',
+                                    'Top 100': 'Sí' if pos.get('top_100', False) else 'No',
+                                    'API Google Utilizada': 'Sí' if pos.get('api_used', False) else 'No'
+                                })
+                        
+                        if position_data:
+                            position_df = pd.DataFrame(position_data)
+                            position_df.to_excel(writer, sheet_name='Posicionamiento', index=False)
+                    
+                    # Hojas individuales para cada dominio
+                    for result in comparison_results['individual_results']:
+                        domain = result['domain']
+                        safe_domain = ''.join(c for c in domain[:10] if c.isalnum())
+                        
+                        # Encabezados
+                        headers_data = []
+                        if result['structure'].get('h1_tags'):
+                            for h1 in result['structure']['h1_tags']:
+                                headers_data.append({'Tipo': 'H1', 'Texto': h1})
+                        if result['structure'].get('h2_tags'):
+                            for h2 in result['structure']['h2_tags']:
+                                headers_data.append({'Tipo': 'H2', 'Texto': h2})
+                        
+                        if headers_data:
+                            headers_df = pd.DataFrame(headers_data)
+                            headers_df.to_excel(writer, sheet_name=f'{safe_domain}_Headers', index=False)
+                        
+                        # Keywords de este dominio
+                        if result['top_keywords']:
+                            domain_keywords_df = pd.DataFrame(result['top_keywords'], columns=['Palabra', 'Frecuencia'])
+                            domain_keywords_df.to_excel(writer, sheet_name=f'{safe_domain}_Keywords', index=False)
+                        
+                        # Frases de este dominio
+                        if result['top_phrases']:
+                            domain_phrases_df = pd.DataFrame(result['top_phrases'], columns=['Frase', 'Frecuencia'])
+                            domain_phrases_df.to_excel(writer, sheet_name=f'{safe_domain}_Frases', index=False)
+                        
+                        # Análisis específico de keyword si está disponible
+                        if target_keyword and 'keyword_analysis' in result:
+                            kw_analysis = result['keyword_analysis']
+                            
+                            # Datos generales
+                            kw_general_data = [
+                                {'Métrica': 'Keyword', 'Valor': target_keyword},
+                                {'Métrica': 'Conteo de Keyword', 'Valor': kw_analysis.get('keyword_count', 0)},
+                                {'Métrica': 'Densidad de Keyword (%)', 'Valor': kw_analysis.get('keyword_density', 0)},
+                                {'Métrica': 'Keyword en Título', 'Valor': 'Sí' if kw_analysis.get('in_title', False) else 'No'},
+                                {'Métrica': 'Keyword en Meta Descripción', 'Valor': 'Sí' if kw_analysis.get('in_meta_description', False) else 'No'},
+                                {'Métrica': 'Keyword en URL', 'Valor': 'Sí' if kw_analysis.get('in_url', False) else 'No'},
+                                {'Métrica': 'Keyword en H1', 'Valor': 'Sí' if kw_analysis.get('in_h1', False) else 'No'},
+                                {'Métrica': 'Keyword en H2', 'Valor': 'Sí' if kw_analysis.get('in_h2', False) else 'No'},
+                                {'Métrica': 'Keyword en Primer Párrafo', 'Valor': 'Sí' if kw_analysis.get('in_first_paragraph', False) else 'No'},
+                                {'Métrica': 'Keyword en Atributos Alt', 'Valor': 'Sí' if kw_analysis.get('in_img_alt', False) else 'No'},
+                                {'Métrica': 'Keyword en Nombres de Archivos', 'Valor': 'Sí' if kw_analysis.get('in_img_filename', False) else 'No'},
+                                {'Métrica': 'Keyword en Texto de Enlaces', 'Valor': 'Sí' if kw_analysis.get('in_internal_links_text', False) else 'No'},
+                                {'Métrica': 'Puntaje SEO (1-100)', 'Valor': kw_analysis.get('seo_score', 0)},
+                            ]
+                            
+                            # Añadir datos de posicionamiento si están disponibles
+                            if 'search_position' in result:
+                                pos = result['search_position']
+                                kw_general_data.extend([
+                                    {'Métrica': 'Posición Estimada', 'Valor': pos.get('position', 'Desconocida')},
+                                    {'Métrica': 'Rango de Posición', 'Valor': pos.get('position_range', 'N/A')},
+                                    {'Métrica': 'Confianza', 'Valor': pos.get('confidence', 'N/A')},
+                                    {'Métrica': 'En Top 10', 'Valor': 'Sí' if pos.get('top_10', False) else 'No'},
+                                    {'Métrica': 'En Top 30', 'Valor': 'Sí' if pos.get('top_30', False) else 'No'},
+                                    {'Métrica': 'API Google Utilizada', 'Valor': 'Sí' if pos.get('api_used', False) else 'No'}
+                                ])
+                            
+                            kw_general_df = pd.DataFrame(kw_general_data)
+                            kw_general_df.to_excel(writer, sheet_name=f'{safe_domain}_KW', index=False)
+                            
+                            # Keywords similares
+                            if kw_analysis.get('similar_keywords'):
+                                similar_kw_data = []
+                                for kw, sim in kw_analysis['similar_keywords']:
+                                    count = kw_analysis['similar_keywords_counts'].get(kw, 0)
+                                    similar_kw_data.append({
+                                        'Keyword Similar': kw,
+                                        'Similitud (%)': sim,
+                                        'Frecuencia': count
+                                    })
+                                
+                                similar_kw_df = pd.DataFrame(similar_kw_data)
+                                similar_kw_df.to_excel(writer, sheet_name=f'{safe_domain}_KWSim', index=False)
+                
+                return output_file
+            except Exception as e:
+                print(f"Error al generar Excel: {str(e)}")
+                # En caso de error, crear un informe de texto
+                output_file = f"{self.results_dir}/seo_analysis_error.txt"
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    f.write(f"Error al generar informe Excel: {str(e)}\n")
+                    f.write("Se recomienda utilizar el formato 'text' o 'json' en su lugar.")
+                return output_file
+            
+        else:  # Formato de texto por defecto
+            output_file = f"{self.results_dir}/seo_analysis.txt"
+            
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write("=== ANÁLISIS SEO AVANZADO ===\n\n")
+                
+                # Escribir resumen general
+                f.write("== DOMINIOS ANALIZADOS ==\n")
+                for domain in domain_names:
+                    f.write(f"- {domain}\n")
+                f.write("\n")
+                
+                if target_keyword:
+                    f.write(f"== KEYWORD OBJETIVO: {target_keyword} ==\n\n")
+                    
+                    # Escribir keywords relacionadas
+                    if related_keywords:
+                        f.write("== KEYWORDS RELACIONADAS ==\n")
+                        for kw in related_keywords:
+                            f.write(f"- {kw}\n")
+                        f.write("\n")
+                
+                # Escribir palabras clave comunes
+                f.write("== PALABRAS CLAVE COMUNES ==\n")
+                for word, count in comparison_results['common_analysis']['common_keywords'][:15]:
+                    f.write(f"{word}: {count}\n")
+                f.write("\n")
+                
+                # Escribir frases clave comunes
+                f.write("== FRASES CLAVE COMUNES ==\n")
+                for phrase, count in comparison_results['common_analysis']['common_phrases'][:10]:
+                    f.write(f"{phrase}: {count}\n")
+                f.write("\n")
+                
+                # Posicionamiento general
+                if target_keyword:
+                    f.write("== POSICIONAMIENTO PARA KEYWORD ==\n")
+                    for result in comparison_results['individual_results']:
+                        if 'search_position' in result:
+                            pos = result['search_position']
+                            api_used = 'Sí' if pos.get('api_used', False) else 'No'
+                            f.write(f"{result['domain']}:\n")
+                            f.write(f"  - Posición estimada: {pos.get('position', 'Desconocida')}\n")
+                            f.write(f"  - Rango: {pos.get('position_range', 'N/A')}\n")
+                            f.write(f"  - Confianza: {pos.get('confidence', 'N/A')}\n")
+                            f.write(f"  - Top 10: {'Sí' if pos.get('top_10', False) else 'No'}\n")
+                            f.write(f"  - Top 30: {'Sí' if pos.get('top_30', False) else 'No'}\n")
+                            f.write(f"  - API Google utilizada: {api_used}\n")
+                    f.write("\n")
+                
+                # Escribir análisis individual
+                f.write("== ANÁLISIS INDIVIDUAL ==\n")
+                for result in comparison_results['individual_results']:
+                    f.write(f"\n--- {result['domain']} ---\n")
+                    f.write(f"URL: {result['url']}\n")
+                    f.write(f"Título: {result['title']}\n")
+                    f.write(f"Meta Descripción: {result['meta_description']}\n")
+                    
+                    f.write("\nEstructura:\n")
+                    f.write(f"- H1: {result['structure']['h1_count']}\n")
+                    f.write(f"- H2: {result['structure']['h2_count']}\n")
+                    f.write(f"- H3: {result['structure']['h3_count']}\n")
+                    f.write(f"- Párrafos: {result['structure']['paragraph_count']}\n")
+                    f.write(f"- Enlaces Internos: {result['structure']['internal_link_count']}\n")
+                    f.write(f"- Enlaces Externos: {result['structure']['external_link_count']}\n")
+                    f.write(f"- Imágenes: {result['structure']['image_count']}\n")
+                    f.write(f"- Imágenes con Alt: {result['structure']['images_with_alt']}\n")
+                    
+                    f.write("\nSchema.org:\n")
+                    if result['structure']['has_schema']:
+                        f.write(f"- Tipos: {', '.join(result['structure']['schema_types'])}\n")
+                    else:
+                        f.write("- No se detectaron datos estructurados\n")
+                    
+                    f.write("\nPalabras clave principales:\n")
+                    for word, count in result['top_keywords']:
+                        f.write(f"- {word}: {count}\n")
+                    
+                    f.write("\nFrases clave principales:\n")
+                    for phrase, count in result['top_phrases']:
+                        f.write(f"- {phrase}: {count}\n")
+                    
+                    # Escribir análisis de keyword específica si está disponible
+                    if target_keyword and 'keyword_analysis' in result:
+                        kw = result['keyword_analysis']
+                        f.write(f"\nAnálisis de keyword: {target_keyword}\n")
+                        f.write(f"- Conteo: {kw.get('keyword_count', 0)}\n")
+                        f.write(f"- Densidad: {kw.get('keyword_density', 0)}%\n")
+                        f.write(f"- En título: {'Sí' if kw.get('in_title', False) else 'No'}\n")
+                        f.write(f"- En meta descripción: {'Sí' if kw.get('in_meta_description', False) else 'No'}\n")
+                        f.write(f"- En URL: {'Sí' if kw.get('in_url', False) else 'No'}\n")
+                        f.write(f"- En H1: {'Sí' if kw.get('in_h1', False) else 'No'}\n")
+                        f.write(f"- En H2: {'Sí' if kw.get('in_h2', False) else 'No'}\n")
+                        f.write(f"- En primer párrafo: {'Sí' if kw.get('in_first_paragraph', False) else 'No'}\n")
+                        f.write(f"- En alt de imágenes: {'Sí' if kw.get('in_img_alt', False) else 'No'}\n")
+                        f.write(f"- En nombres de archivos: {'Sí' if kw.get('in_img_filename', False) else 'No'}\n")
+                        f.write(f"- En texto de enlaces: {'Sí' if kw.get('in_internal_links_text', False) else 'No'}\n")
+                        f.write(f"- Puntaje SEO: {kw.get('seo_score', 0)}/100\n")
+                        
+                        f.write("\nKeywords similares:\n")
+                        for similar, score in kw.get('similar_keywords', []):
+                            count = kw.get('similar_keywords_counts', {}).get(similar, 0)
+                            f.write(f"- {similar}: similitud {score}%, frecuencia {count}\n")
+                    
+                    # Escribir información de posicionamiento si está disponible
+                    if target_keyword and 'search_position' in result:
+                        pos = result['search_position']
+                        api_used = 'Sí' if pos.get('api_used', False) else 'No'
+                        f.write(f"\nPosicionamiento en buscadores para '{target_keyword}':\n")
+                        f.write(f"- Posición estimada: {pos.get('position', 'Desconocida')}\n")
+                        f.write(f"- Rango de posición: {pos.get('position_range', 'N/A')}\n")
+                        f.write(f"- Confianza de la estimación: {pos.get('confidence', 'N/A')}\n")
+                        f.write(f"- En Top 10: {'Sí' if pos.get('top_10', False) else 'No'}\n")
+                        f.write(f"- En Top 30: {'Sí' if pos.get('top_30', False) else 'No'}\n")
+                        f.write(f"- En Top 100: {'Sí' if pos.get('top_100', False) else 'No'}\n")
+                        f.write(f"- API Google utilizada: {api_used}\n")
+                    
+                    f.write("\n")
+            
+            return output_file'
+            
+        # Si llegamos aquí, hay al menos algunos datos para analizar
+        domain_names = [result['domain'] for result in comparison_results['individual_results']]
+        target_keyword = comparison_results.get('target_keyword')
+        related_keywords = comparison_results.get('related_keywords', [])
+        
+        # Crear un resumen de estructura para comparación
+        structure_data = []
+        for result in comparison_results['individual_results']:
+            data = {'domain': result['domain']}
+            data.update(result['structure'])
+            structure_data.append(data)
+        
+        structure_df = pd.DataFrame(structure_data)
+        
+        # Generar el informe según el formato solicitado
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        
+        if output_format == 'json':
+            # Guardar resultados como JSON
+            output_file = f"{self.results_dir}/seo_analysis.json"
+            with open(output_file, 'w', encoding='utf-8') as f:
+                # Convertir a un diccionario serializable
+                serializable_results = {
+                    'individual_results': [],
+                    'common_analysis': comparison_results['common_analysis'],
+                    'target_keyword': comparison_results.get('target_keyword'),
+                    'related_keywords': related_keywords
+                }
+                
+                # Procesar cada resultado individual
+                for result in comparison_results['individual_results']:
+                    serializable_result = {
+                        'url': result['url'],
+                        'domain': result['domain'],
+                        'title': result['title'],
+                        'meta_description': result['meta_description'],
+                        'top_keywords': result['top_keywords'],
+                        'top_phrases': result['top_phrases'],
+                        'structure': result['structure']
+                    }
+                    
+                    if 'keyword_analysis' in result:
+                        serializable_result['keyword_analysis'] = result['keyword_analysis']
+                    
+                    if 'search_position' in result:
+                        serializable_result['search_position'] = result['search_position']
+                        
+                    serializable_results['individual_results'].append(serializable_result)
+                
+                json.dump(serializable_results, f, ensure_ascii=False, indent=4)
+            return output_file
